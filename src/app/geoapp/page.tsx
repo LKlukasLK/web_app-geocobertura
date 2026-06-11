@@ -26,6 +26,7 @@ export default function Geoapp() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<string>("todas");
   const [legendOpen, setLegendOpen] = useState(true);
+  const [vizMode, setVizMode] = useState<string>("promedio");
 
   useEffect(() => {
     supabase
@@ -84,6 +85,29 @@ export default function Geoapp() {
               </button>
             ))}
           </div>
+          <div className="flex items-center gap-1 md:gap-2 text-sm">
+            <span className="text-slate-500 shrink-0">Modo:</span>
+            <button
+              onClick={() => setVizMode("promedio")}
+              className={`px-2.5 md:px-3 py-1.5 rounded text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                vizMode === "promedio"
+                  ? "bg-emerald-700 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Promedio
+            </button>
+            <button
+              onClick={() => setVizMode("mejor-señal")}
+              className={`px-2.5 md:px-3 py-1.5 rounded text-xs md:text-sm font-medium transition-colors whitespace-nowrap ${
+                vizMode === "mejor-señal"
+                  ? "bg-emerald-700 text-white"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+              }`}
+            >
+              Mejor señal
+            </button>
+          </div>
           {!loading && (
             <span className="text-xs md:text-sm text-slate-400 md:ml-auto">
               {filtered.length} de {readings.length} lecturas
@@ -116,7 +140,7 @@ export default function Geoapp() {
           </div>
         ) : (
           <div className="h-[50vh] md:h-[60vh] rounded-xl overflow-hidden shadow border border-slate-200 relative">
-            <MapView readings={filtered} />
+            <MapView readings={filtered} mode={vizMode} />
 
             {/* Leyenda de calor colapsable */}
             <div className="absolute bottom-3 right-3 md:bottom-4 md:right-4 z-[1000]">

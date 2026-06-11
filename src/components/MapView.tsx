@@ -61,7 +61,7 @@ function interpolateColor(dbm: number): string {
   return dbm > -65 ? "rgb(50, 215, 75)" : "rgb(255, 43, 166)";
 }
 
-function CoverageCanvas({ readings }: { readings: Reading[] }) {
+function CoverageCanvas({ readings, mode }: { readings: Reading[]; mode: string }) {
   const map = useMap();
 
   useEffect(() => {
@@ -109,25 +109,53 @@ function CoverageCanvas({ readings }: { readings: Reading[] }) {
       ctx.filter = `blur(${Math.max(1, Math.min(8, averageRadius / 10))}px)`;
       for (let y = -cellSize; y < size.y + cellSize; y += cellSize) {
         for (let x = -cellSize; x < size.x + cellSize; x += cellSize) {
-          let weightedSum = 0;
-          let weight = 0;
+          let dbm: number;
+          let alpha: number;
 
-          for (const point of points) {
-            const dx = point.x - x;
-            const dy = point.y - y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+          if (mode === "mejor-señal") {
+            const nearby: { dbm: number; weight: number }[] = [];
 
-            if (distance > point.radius) continue;
+            for (const point of points) {
+              const dx = point.x - x;
+              const dy = point.y - y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
 
-            const pointWeight = Math.pow(1 - distance / point.radius, 2);
-            weightedSum += point.dbm * pointWeight;
-            weight += pointWeight;
+              if (distance > point.radius) continue;
+
+              const pointWeight = Math.pow(1 - distance / point.radius, 2);
+              nearby.push({ dbm: point.dbm, weight: pointWeight });
+            }
+
+            if (!nearby.length) continue;
+
+            const totalWeight = nearby.reduce((s, n) => s + n.weight, 0);
+
+            nearby.sort((a, b) => b.dbm - a.dbm);
+            const idx = Math.min(Math.floor(nearby.length * 0.25), nearby.length - 1);
+            dbm = nearby[idx].dbm;
+            alpha = Math.min(0.9, Math.max(0.28, totalWeight / 2.8));
+          } else {
+            let weightedSum = 0;
+            let weight = 0;
+
+            for (const point of points) {
+              const dx = point.x - x;
+              const dy = point.y - y;
+              const distance = Math.sqrt(dx * dx + dy * dy);
+
+              if (distance > point.radius) continue;
+
+              const pointWeight = Math.pow(1 - distance / point.radius, 2);
+              weightedSum += point.dbm * pointWeight;
+              weight += pointWeight;
+            }
+
+            if (weight <= 0) continue;
+
+            dbm = weightedSum / weight;
+            alpha = Math.min(0.9, Math.max(0.28, weight / 2.8));
           }
 
-          if (weight <= 0) continue;
-
-          const dbm = weightedSum / weight;
-          const alpha = Math.min(0.9, Math.max(0.28, weight / 2.8));
           ctx.globalAlpha = alpha;
           ctx.fillStyle = interpolateColor(dbm);
           ctx.fillRect(x - cellSize, y - cellSize, cellSize * 2.2, cellSize * 2.2);
@@ -145,7 +173,7 @@ function CoverageCanvas({ readings }: { readings: Reading[] }) {
       map.off("move zoom resize", draw);
       canvas.remove();
     };
-  }, [map, readings]);
+  }, [map, readings, mode]);
 
   return null;
 }
@@ -162,7 +190,7 @@ function FitToReadings({ readings }: { readings: Reading[] }) {
   return null;
 }
 
-export default function MapView({ readings }: { readings: Reading[] }) {
+export default function MapView({ readings, mode }: { readings: Reading[]; mode?: string }) {
   const center: [number, number] =
     readings.length > 0
       ? [readings[0].lat, readings[0].lng]
@@ -192,7 +220,7 @@ export default function MapView({ readings }: { readings: Reading[] }) {
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <CoverageCanvas readings={readings} />
+      <CoverageCanvas readings={readings} mode={mode ?? "promedio"} />
       <FitToReadings readings={readings} />
       {unique.map((g) => {
         const avgDbm = g.sum / g.count;
