@@ -1,36 +1,72 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GeoSeñal
 
-## Getting Started
+Aplicación web para consultar la cobertura de señal móvil sobre un mapa. Reúne lecturas
+reales de intensidad de señal (en dBm) guardadas en Supabase y las muestra como un mapa de
+calor interactivo, con filtros por calidad y estadísticas.
 
-First, run the development server:
+## Funcionalidades
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- **Portada** (`/`): presentación de la aplicación y acceso al mapa.
+- **Mapa de cobertura** (`/geoapp`):
+  - Carga las últimas 500 lecturas de la tabla `readings` de Supabase.
+  - Dibuja un mapa de calor sobre OpenStreetMap: cada lectura cubre un radio de ~100 m y el
+    color va del verde (señal buena) al rosa (sin señal).
+  - **Filtro de calidad**: todas, buena (≥ -80 dBm), regular (-100 a -80 dBm) o mala (< -100 dBm).
+  - **Modo de visualización**: *Promedio* (media ponderada de las lecturas cercanas) o
+    *Mejor señal* (prioriza las lecturas más fuertes de cada zona).
+  - Panel de estadísticas: total de lecturas, reparto por calidad y señal media.
+  - Leyenda de colores plegable.
+- **Aviso legal** (`/aviso-legal`).
+
+## Tecnologías
+
+- [Next.js](https://nextjs.org) 16 (App Router) + React 19 + TypeScript
+- Tailwind CSS 4
+- [Leaflet](https://leafletjs.com) / React Leaflet para el mapa (capa de calor propia en canvas)
+- [Supabase](https://supabase.com) como origen de datos
+
+## Estructura
+
+```
+src/
+├── app/
+│   ├── page.tsx            # Portada
+│   ├── geoapp/page.tsx     # Mapa de cobertura (carga de datos, filtros, estadísticas)
+│   ├── aviso-legal/page.tsx
+│   ├── layout.tsx
+│   └── globals.css
+├── components/
+│   ├── MapView.tsx         # Mapa Leaflet y capa de calor de cobertura
+│   ├── cabecera.tsx        # Cabecera / navegación
+│   └── pie.tsx             # Pie de página
+└── types/leaflet.heat.d.ts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Datos
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+La app lee la tabla `readings` de Supabase con estas columnas:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Columna      | Tipo      | Descripción                      |
+|--------------|-----------|----------------------------------|
+| `id`         | number    | Identificador                    |
+| `lat`        | number    | Latitud                          |
+| `lng`        | number    | Longitud                         |
+| `dbm`        | number    | Intensidad de señal en dBm       |
+| `created_at` | timestamp | Fecha de la lectura              |
 
-## Learn More
+La URL del proyecto de Supabase y la clave pública (*publishable*) están escritas
+directamente en `src/app/geoapp/page.tsx`.
 
-To learn more about Next.js, take a look at the following resources:
+## Desarrollo
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm install
+npm run dev     # http://localhost:3000
+npm run build   # build de producción
+npm run start   # servir el build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Ramas
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `master`: producción.
+- `staging`: todas las modificaciones se hacen aquí y se pasan a `master` mediante pull request.
