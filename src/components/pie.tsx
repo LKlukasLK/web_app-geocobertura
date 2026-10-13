@@ -16,7 +16,7 @@ export default function Pie({
           {version}
         </p>
         <div className="flex gap-5">
-          <a href="#" className="hover:text-white transition-colors">Aviso legal</a>
+          <a href="/aviso-legal" className="hover:text-white transition-colors">Aviso legal</a>
           <a href="#" className="hover:text-white transition-colors">Accesibilidad</a>
           <a href="#" className="hover:text-white transition-colors">Contacto</a>
         </div>
