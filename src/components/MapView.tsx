@@ -61,13 +61,17 @@ function interpolateColor(dbm: number): string {
   return dbm > -65 ? "rgb(50, 215, 75)" : "rgb(255, 43, 166)";
 }
 
+// Margen extra que se dibuja alrededor de la vista para que al arrastrar no se vean bordes vacíos.
+const CANVAS_PADDING = 0.5;
+
 function CoverageCanvas({ readings, mode }: { readings: Reading[]; mode: string }) {
   const map = useMap();
 
   useEffect(() => {
     if (!readings.length) return;
 
-    const canvas = L.DomUtil.create("canvas", "leaflet-coverage-layer") as HTMLCanvasElement;
+    // "leaflet-zoom-hide" hace que Leaflet oculte la capa durante la animación de zoom.
+    const canvas = L.DomUtil.create("canvas", "leaflet-coverage-layer leaflet-zoom-hide") as HTMLCanvasElement;
     const pane = map.getPane("overlayPane");
     pane?.appendChild(canvas);
 
@@ -77,16 +81,23 @@ function CoverageCanvas({ readings, mode }: { readings: Reading[]; mode: string 
     canvas.style.opacity = "0.78";
 
     const ctx = canvas.getContext("2d");
-    if (!ctx) return;
+    // Las celdas se pintan sin desenfoque en un canvas auxiliar y luego se copian
+    // al visible con un único desenfoque, en lugar de desenfocar cada celda.
+    const cells = document.createElement("canvas");
+    const cellsCtx = cells.getContext("2d");
+    if (!ctx || !cellsCtx) return;
 
     const draw = () => {
       const size = map.getSize();
-      const topLeft = map.containerPointToLayerPoint([0, 0]);
+      const padX = Math.round(size.x * CANVAS_PADDING);
+      const padY = Math.round(size.y * CANVAS_PADDING);
+      const width = size.x + padX * 2;
+      const height = size.y + padY * 2;
+      const topLeft = map.containerPointToLayerPoint([-padX, -padY]);
 
-      canvas.width = size.x;
-      canvas.height = size.y;
+      canvas.width = cells.width = width;
+      canvas.height = cells.height = height;
       L.DomUtil.setPosition(canvas, topLeft);
-      ctx.clearRect(0, 0, size.x, size.y);
 
       const coverageRadiusMeters = 100;
       const points = readings.map((reading) => {
@@ -96,7 +107,8 @@ function CoverageCanvas({ readings, mode }: { readings: Reading[]; mode: string 
         const edge = map.latLngToContainerPoint([reading.lat, reading.lng + lngOffset]);
 
         return {
-          ...position,
+          x: position.x + padX,
+          y: position.y + padY,
           radius: Math.max(2, Math.abs(edge.x - position.x)),
           dbm: reading.dbm,
         };
@@ -106,71 +118,78 @@ function CoverageCanvas({ readings, mode }: { readings: Reading[]; mode: string 
         points.reduce((sum, point) => sum + point.radius, 0) / points.length;
       const cellSize = Math.max(2, Math.min(12, Math.round(averageRadius / 7)));
 
-      ctx.filter = `blur(${Math.max(1, Math.min(8, averageRadius / 10))}px)`;
-      for (let y = -cellSize; y < size.y + cellSize; y += cellSize) {
-        for (let x = -cellSize; x < size.x + cellSize; x += cellSize) {
-          let dbm: number;
-          let alpha: number;
+      // Rejilla de celdas: la celda (i, j) está centrada en ((i - 1) * cellSize, (j - 1) * cellSize).
+      const cols = Math.ceil(width / cellSize) + 2;
+      const rows = Math.ceil(height / cellSize) + 2;
+      const weights = new Float64Array(cols * rows);
+      const weightedSums = new Float64Array(cols * rows);
+      const nearbyByCell: { dbm: number; weight: number }[][] = [];
+      const bestSignal = mode === "mejor-señal";
 
-          if (mode === "mejor-señal") {
-            const nearby: { dbm: number; weight: number }[] = [];
+      // Cada lectura solo recorre las celdas que caen dentro de su radio.
+      for (const point of points) {
+        const iMin = Math.max(0, Math.ceil((point.x - point.radius) / cellSize) + 1);
+        const iMax = Math.min(cols - 1, Math.floor((point.x + point.radius) / cellSize) + 1);
+        const jMin = Math.max(0, Math.ceil((point.y - point.radius) / cellSize) + 1);
+        const jMax = Math.min(rows - 1, Math.floor((point.y + point.radius) / cellSize) + 1);
 
-            for (const point of points) {
-              const dx = point.x - x;
-              const dy = point.y - y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
+        for (let j = jMin; j <= jMax; j++) {
+          const dy = point.y - (j - 1) * cellSize;
+          for (let i = iMin; i <= iMax; i++) {
+            const dx = point.x - (i - 1) * cellSize;
+            const distance = Math.sqrt(dx * dx + dy * dy);
 
-              if (distance > point.radius) continue;
+            if (distance > point.radius) continue;
 
-              const pointWeight = Math.pow(1 - distance / point.radius, 2);
-              nearby.push({ dbm: point.dbm, weight: pointWeight });
+            const pointWeight = Math.pow(1 - distance / point.radius, 2);
+            const cell = j * cols + i;
+            weights[cell] += pointWeight;
+            if (bestSignal) {
+              (nearbyByCell[cell] ??= []).push({ dbm: point.dbm, weight: pointWeight });
+            } else {
+              weightedSums[cell] += point.dbm * pointWeight;
             }
-
-            if (!nearby.length) continue;
-
-            const totalWeight = nearby.reduce((s, n) => s + n.weight, 0);
-
-            nearby.sort((a, b) => b.dbm - a.dbm);
-            const idx = Math.min(Math.floor(nearby.length * 0.25), nearby.length - 1);
-            dbm = nearby[idx].dbm;
-            alpha = Math.min(0.9, Math.max(0.28, totalWeight / 2.8));
-          } else {
-            let weightedSum = 0;
-            let weight = 0;
-
-            for (const point of points) {
-              const dx = point.x - x;
-              const dy = point.y - y;
-              const distance = Math.sqrt(dx * dx + dy * dy);
-
-              if (distance > point.radius) continue;
-
-              const pointWeight = Math.pow(1 - distance / point.radius, 2);
-              weightedSum += point.dbm * pointWeight;
-              weight += pointWeight;
-            }
-
-            if (weight <= 0) continue;
-
-            dbm = weightedSum / weight;
-            alpha = Math.min(0.9, Math.max(0.28, weight / 2.8));
           }
-
-          ctx.globalAlpha = alpha;
-          ctx.fillStyle = interpolateColor(dbm);
-          ctx.fillRect(x - cellSize, y - cellSize, cellSize * 2.2, cellSize * 2.2);
         }
       }
 
+      cellsCtx.clearRect(0, 0, width, height);
+      for (let j = 0; j < rows; j++) {
+        for (let i = 0; i < cols; i++) {
+          const cell = j * cols + i;
+          const weight = weights[cell];
+          if (weight <= 0) continue;
+
+          let dbm: number;
+          if (bestSignal) {
+            const nearby = nearbyByCell[cell];
+            nearby.sort((a, b) => b.dbm - a.dbm);
+            const idx = Math.min(Math.floor(nearby.length * 0.25), nearby.length - 1);
+            dbm = nearby[idx].dbm;
+          } else {
+            dbm = weightedSums[cell] / weight;
+          }
+
+          const x = (i - 1) * cellSize;
+          const y = (j - 1) * cellSize;
+          cellsCtx.globalAlpha = Math.min(0.9, Math.max(0.28, weight / 2.8));
+          cellsCtx.fillStyle = interpolateColor(dbm);
+          cellsCtx.fillRect(x - cellSize, y - cellSize, cellSize * 2.2, cellSize * 2.2);
+        }
+      }
+
+      ctx.clearRect(0, 0, width, height);
+      ctx.filter = `blur(${Math.max(1, Math.min(8, averageRadius / 10))}px)`;
+      ctx.drawImage(cells, 0, 0);
       ctx.filter = "none";
-      ctx.globalAlpha = 1;
     };
 
+    // La capa ya se desplaza con el mapa al arrastrar; solo hace falta redibujar al terminar.
     draw();
-    map.on("move zoom resize", draw);
+    map.on("moveend zoomend resize", draw);
 
     return () => {
-      map.off("move zoom resize", draw);
+      map.off("moveend zoomend resize", draw);
       canvas.remove();
     };
   }, [map, readings, mode]);
