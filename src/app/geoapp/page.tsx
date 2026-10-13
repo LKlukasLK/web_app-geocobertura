@@ -24,6 +24,7 @@ export interface Reading {
 export default function Geoapp() {
   const [readings, setReadings] = useState<Reading[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("todas");
   const [legendOpen, setLegendOpen] = useState(true);
   const [vizMode, setVizMode] = useState<string>("promedio");
@@ -35,7 +36,12 @@ export default function Geoapp() {
       .order("created_at", { ascending: false })
       .limit(500)
       .then(({ data, error }) => {
-        if (!error && data) setReadings(data as Reading[]);
+        if (error) {
+          console.error("Error cargando lecturas de Supabase:", error);
+          setLoadError(error.message);
+        } else if (data) {
+          setReadings(data as Reading[]);
+        }
         setLoading(false);
       });
   }, []);
@@ -115,6 +121,14 @@ export default function Geoapp() {
           )}
         </div>
       </div>
+
+      {loadError && (
+        <div className="container mx-auto px-4 md:px-6 pt-3 md:pt-4">
+          <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg px-4 py-3 text-sm">
+            No se pudieron cargar las lecturas: {loadError}
+          </div>
+        </div>
+      )}
 
       {/* Panel de estadísticas */}
       {!loading && (
