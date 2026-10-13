@@ -8,13 +8,14 @@ export default function Pie({
   version = "v0.3",
 }: PieProps) {
   return (
-    <footer className="bg-emerald-800 text-white mt-auto">
-      <div className="bg-emerald-900 text-[10px] md:text-xs text-center py-1.5 md:py-2 text-emerald-300 px-2">
-        Sistema de Monitorización de Cobertura — {brandName} {version}
-      </div>
-      <div className="container mx-auto px-4 md:px-6 py-3 md:py-4 flex flex-col md:flex-row items-center justify-between text-[10px] md:text-xs text-emerald-200 gap-1 md:gap-0">
-        <p>&copy; 2024 {brandName}. Todos los derechos reservados.</p>
-        <div className="flex gap-3 md:gap-4">
+    <footer className="bg-emerald-950 text-emerald-200/70 mt-auto border-t border-white/5">
+      <div className="container mx-auto px-4 md:px-6 py-5 flex flex-col md:flex-row items-center justify-between gap-3 text-xs">
+        <p>
+          &copy; {new Date().getFullYear()} <span className="text-white font-medium">{brandName}</span>
+          <span className="mx-2 text-emerald-200/30">·</span>
+          {version}
+        </p>
+        <div className="flex gap-5">
           <a href="#" className="hover:text-white transition-colors">Aviso legal</a>
           <a href="#" className="hover:text-white transition-colors">Accesibilidad</a>
           <a href="#" className="hover:text-white transition-colors">Contacto</a>
